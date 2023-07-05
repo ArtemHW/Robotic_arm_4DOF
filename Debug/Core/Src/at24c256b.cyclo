@@ -1,0 +1,5 @@
+at24c256b.c:21:6:at24c256b_byte_write	1
+at24c256b.c:52:6:at24c256b_page_write	1
+at24c256b.c:70:6:at24c256b_byte_read	1
+at24c256b.c:89:6:at24c256b_sequential_read	1
+at24c256b.c:105:6:write_protection	3
