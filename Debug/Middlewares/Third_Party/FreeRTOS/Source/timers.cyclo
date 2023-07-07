@@ -13,9 +13,11 @@ timers.c:538:13:prvProcessTimerOrBlockTask	6
 timers.c:598:19:prvGetNextExpireTime	2
 timers.c:624:19:prvSampleTimeNow	2
 timers.c:647:19:prvInsertTimerInActiveList	5
-timers.c:688:13:prvProcessReceivedCommands	12
+timers.c:688:13:prvProcessReceivedCommands	14
 timers.c:835:13:prvSwitchTimerLists	5
 timers.c:894:13:prvCheckForValidListAndQueue	3
 timers.c:945:12:xTimerIsTimerActive	2
 timers.c:966:7:pvTimerGetTimerID	2
 timers.c:983:6:vTimerSetTimerID	2
+timers.c:999:13:xTimerPendFunctionCallFromISR	1
+timers.c:1023:13:xTimerPendFunctionCall	2

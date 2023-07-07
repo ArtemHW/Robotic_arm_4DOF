@@ -49,10 +49,24 @@ TIM_HandleTypeDef htim1;
 
 osThreadId ServoMotorsHandle;
 osThreadId EEPROMsaveHandle;
+osThreadId PathHandle;
 /* USER CODE BEGIN PV */
 struct buffer_type{
 	uint16_t adc_buffer[4];
+	TimerHandle_t xTimer1Handle;
+	EventGroupHandle_t xEventGroup1;
+	uint16_t points[30];
+	uint8_t number_of_points[10] = {0};
+	uint8_t sum;
 }buffer;
+
+struct myEventGroup_type
+{
+	uint8_t flag1 : 1;
+	uint8_t flag2 : 1;
+	uint8_t flag3 : 1;
+	uint8_t flagBlockTaskServom : 1;
+}myEventGroup;
 
 /* USER CODE END PV */
 
@@ -64,9 +78,10 @@ static void MX_I2C1_Init(void);
 static void MX_ADC1_Init(void);
 void servo_motors(void const * argument);
 void eeprom_save(void const * argument);
+void path(void const * argument);
 
 /* USER CODE BEGIN PFP */
-
+void timer1Callback( TimerHandle_t xTimer );
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -81,7 +96,10 @@ void eeprom_save(void const * argument);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+	myEventGroup.flag1 = 0;
+	myEventGroup.flag2 = 0;
+	myEventGroup.flag3 = 0;
+	myEventGroup.flagBlockTaskServom = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -132,6 +150,8 @@ int main(void)
 	ADC1->CR |= ADC_CR_ADEN; //ADC enable control
 	while(ADC1->ISR & ADC_ISR_ADRDY) __asm__ volatile("NOP");
 	ADC1->CR |= ADC_CR_ADSTART; // ADC start of regular conversion
+
+	buffer.xEventGroup1 = xEventGroupCreate();
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -144,6 +164,8 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
+	buffer.xTimer1Handle = xTimerCreate("Timer1", pdMS_TO_TICKS(50), pdTRUE, 0, timer1Callback);
+	xTimerStart(buffer.xTimer1Handle, portMAX_DELAY);
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
@@ -152,12 +174,16 @@ int main(void)
 
   /* Create the thread(s) */
   /* definition and creation of ServoMotors */
-  osThreadDef(ServoMotors, servo_motors, osPriorityNormal, 0, 128);
+  osThreadDef(ServoMotors, servo_motors, osPriorityNormal, 0, 64);
   ServoMotorsHandle = osThreadCreate(osThread(ServoMotors), NULL);
 
   /* definition and creation of EEPROMsave */
-  osThreadDef(EEPROMsave, eeprom_save, osPriorityAboveNormal, 0, 128);
+  osThreadDef(EEPROMsave, eeprom_save, osPriorityAboveNormal, 0, 250);
   EEPROMsaveHandle = osThreadCreate(osThread(EEPROMsave), NULL);
+
+  /* definition and creation of Path */
+  osThreadDef(Path, path, osPriorityNormal, 0, 128);
+  PathHandle = osThreadCreate(osThread(Path), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -469,6 +495,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pins : PC8 PC9 PC10 PC11 */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10|GPIO_PIN_11;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -476,11 +508,41 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PC12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+void timer1Callback( TimerHandle_t xTimer )
+{
+	//xEventGroupSetBits(buffer.xEventGroup1, 0x1);
+//	xEventGroupSetBitsFromISR(buffer.xEventGroup1, 0x1, pdFALSE);
+	myEventGroup.flag1 = 1;
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if(GPIO_Pin == GPIO_PIN_13)
+	{
+//		xEventGroupSetBitsFromISR(buffer.xEventGroup1, 0x2, pdFALSE);
+		myEventGroup.flag2 = 1;
+	}
+	if(GPIO_Pin == GPIO_PIN_12)
+	{
+//		xEventGroupSetBitsFromISR(buffer.xEventGroup1, 0x4, pdFALSE);
+		myEventGroup.flag3 = 1;
+	}
+}
 
 /* USER CODE END 4 */
 
@@ -497,16 +559,18 @@ void servo_motors(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+//	  xEventGroupWaitBits(buffer.xEventGroup1, 0x1, pdTRUE, pdTRUE, portMAX_DELAY);
+//	  EventBits_t result = 0;
+//	  result = xEventGroupGetBits(buffer.xEventGroup1);
+	  while(myEventGroup.flag1 != 1 && myEventGroup.flagBlockTaskServom == 0)
+	  {
+		  vTaskDelay(15);
+	  }
+	  TIM1->CCR1 = ((float)buffer.adc_buffer[0]/4096)*1000 + 250;
+	  TIM1->CCR2 = ((float)buffer.adc_buffer[1]/4096)*1000 - 350;
+	  TIM1->CCR3 = ((float)buffer.adc_buffer[2]/4096)*1000 + 550;
 	  __asm__ volatile("NOP");
-	  uint16_t address = 64;
-	  char data_to_EEPROM[] = "ABCUUUUUUUUUUUUIIIIIIIIIIITTTTTTTTTTTFFFFFFFFFFFFSSSSSSSKKKKKK";
-	  at24c256b_page_write(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)data_to_EEPROM, sizeof(data_to_EEPROM), address, GPIOC, GPIO_ODR_10);
-	  vTaskDelay(50); // Between write and read operation must be delay!
-	  char buffer_for_seqread[64] = {0};
-	  vTaskDelay(5);
-	  at24c256b_sequential_read(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)buffer_for_seqread, sizeof(buffer_for_seqread), address, GPIOC, GPIO_ODR_10);
-	  vTaskDelay(100);
+	  myEventGroup.flag1 = 0;
   }
   /* USER CODE END 5 */
 }
@@ -521,12 +585,70 @@ void servo_motors(void const * argument)
 void eeprom_save(void const * argument)
 {
   /* USER CODE BEGIN eeprom_save */
+	uint16_t i = 0;
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+//		__asm__ volatile("NOP");
+//		uint16_t address = 64;
+//		char data_to_EEPROM[] = "ABCUUUUUUUUUUUUIIIIIIIIIIITTTTTTTTTTTFFFFFFFFFFFFSSSSSSSKKKKKK";
+//		at24c256b_page_write(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)data_to_EEPROM, sizeof(data_to_EEPROM), address, GPIOC, GPIO_ODR_10);
+//		vTaskDelay(50); // Between write and read operation must be delay!
+//		char buffer_for_seqread[64] = {0};
+//		vTaskDelay(5);
+//		at24c256b_sequential_read(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)buffer_for_seqread, sizeof(buffer_for_seqread), address, GPIOC, GPIO_ODR_10);
+//		vTaskDelay(100);
+	  //xEventGroupWaitBits(buffer.xEventGroup1, 0x2, pdTRUE, pdTRUE, portMAX_DELAY);
+//	  uint32_t result = 0;
+//	  result = xEventGroupGetBits(buffer.xEventGroup1);
+	  while(myEventGroup.flag2 != 1)
+	  {
+		  vTaskDelay(15);
+	  }
+	  buffer.points[i] = TIM1->CCR1;
+	  buffer.points[i+1] = TIM1->CCR2;
+	  buffer.points[i+2] = TIM1->CCR3;
+	  i+=3;
+	  if(i == 30) i = 0;
+	    buffer.sum = i-1;
+	  vTaskDelay(100);
+//	  xEventGroupClearBits(buffer.xEventGroup1, 0x2);
+	  myEventGroup.flag2 = 0;
   }
   /* USER CODE END eeprom_save */
+}
+
+/* USER CODE BEGIN Header_path */
+/**
+* @brief Function implementing the Path thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_path */
+void path(void const * argument)
+{
+  /* USER CODE BEGIN path */
+  /* Infinite loop */
+  for(;;)
+  {
+	  while(myEventGroup.flag3 != 1)
+	  {
+		  vTaskDelay(15);
+	  }
+	  myEventGroup.flagBlockTaskServom = 1;
+	  for(uint8_t i = 0; i<(buffer.sum/3); i++)
+	  {
+		  TIM1->CCR1 = ((float)buffer.points[i*3];
+		  TIM1->CCR2 = ((float)buffer.points[i*3+1];
+		  TIM1->CCR3 = ((float)buffer.points[i*3+2];
+		  vTaskDelay(600);
+		  __asm__ volatile("NOP");
+	  }
+	  vTaskDelay(100);
+	  myEventGroup.flag3 = 0;
+	  myEventGroup.flagBlockTaskServom = 0;
+  }
+  /* USER CODE END path */
 }
 
 /**

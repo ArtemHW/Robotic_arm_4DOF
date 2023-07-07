@@ -19,6 +19,8 @@
 ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2224:12:xTaskGetTickCountFromISR	16	static
 ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2255:13:uxTaskGetNumberOfTasks	4	static
 ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2263:7:pcTaskGetName	24	static,ignoring_inline_asm
+../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2277:16:prvSearchForNameWithinSingleList	48	static
+../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2338:15:xTaskGetHandle	32	static,ignoring_inline_asm
 ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2583:12:xTaskIncrementTick	32	static,ignoring_inline_asm
 ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2845:6:vTaskSwitchContext	32	static,ignoring_inline_asm
 ../Middlewares/Third_Party/FreeRTOS/Source/tasks.c:2904:6:vTaskPlaceOnEventList	24	static,ignoring_inline_asm

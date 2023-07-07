@@ -19,6 +19,8 @@ tasks.c:2209:12:xTaskGetTickCount	1
 tasks.c:2224:12:xTaskGetTickCountFromISR	1
 tasks.c:2255:13:uxTaskGetNumberOfTasks	1
 tasks.c:2263:7:pcTaskGetName	3
+tasks.c:2277:16:prvSearchForNameWithinSingleList	9
+tasks.c:2338:15:xTaskGetHandle	8
 tasks.c:2583:12:xTaskIncrementTick	12
 tasks.c:2845:6:vTaskSwitchContext	4
 tasks.c:2904:6:vTaskPlaceOnEventList	2
