@@ -56,7 +56,7 @@ struct buffer_type{
 	TimerHandle_t xTimer1Handle;
 	EventGroupHandle_t xEventGroup1;
 	uint16_t points[30];
-	uint8_t number_of_points[10] = {0};
+	uint8_t number_of_points[10];
 	uint8_t sum;
 }buffer;
 
@@ -100,6 +100,8 @@ int main(void)
 	myEventGroup.flag2 = 0;
 	myEventGroup.flag3 = 0;
 	myEventGroup.flagBlockTaskServom = 0;
+
+	buffer.sum = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -564,11 +566,17 @@ void servo_motors(void const * argument)
 //	  result = xEventGroupGetBits(buffer.xEventGroup1);
 	  while(myEventGroup.flag1 != 1 && myEventGroup.flagBlockTaskServom == 0)
 	  {
-		  vTaskDelay(15);
+		  vTaskDelay(5);
 	  }
-	  TIM1->CCR1 = ((float)buffer.adc_buffer[0]/4096)*1000 + 250;
-	  TIM1->CCR2 = ((float)buffer.adc_buffer[1]/4096)*1000 - 350;
-	  TIM1->CCR3 = ((float)buffer.adc_buffer[2]/4096)*1000 + 550;
+	  if(buffer.adc_buffer[0]>2200 && TIM1->CCR1 <1700)  TIM1->CCR1 +=5;
+	  else if(buffer.adc_buffer[0]<1850 && TIM1->CCR1 > 30) TIM1->CCR1 -=5;
+	  if(buffer.adc_buffer[1]>2200 && TIM1->CCR2 <1700)  TIM1->CCR2 +=5;
+	  else if(buffer.adc_buffer[1]<1850 && TIM1->CCR2 > 30) TIM1->CCR2 -=5;
+	  if(buffer.adc_buffer[2]>2200 && TIM1->CCR3 <1700)  TIM1->CCR3 +=5;
+	  else if(buffer.adc_buffer[2]<1850 && TIM1->CCR3 > 30) TIM1->CCR3 -=5;
+//	  TIM1->CCR1 = ((float)buffer.adc_buffer[0]/4096)*1000 + 250;
+//	  TIM1->CCR2 = ((float)buffer.adc_buffer[1]/4096)*1000 - 350;
+//	  TIM1->CCR3 = ((float)buffer.adc_buffer[2]/4096)*1000 + 550;
 	  __asm__ volatile("NOP");
 	  myEventGroup.flag1 = 0;
   }
@@ -586,6 +594,7 @@ void eeprom_save(void const * argument)
 {
   /* USER CODE BEGIN eeprom_save */
 	uint16_t i = 0;
+	uint16_t address = 0;
   /* Infinite loop */
   for(;;)
   {
@@ -608,9 +617,13 @@ void eeprom_save(void const * argument)
 	  buffer.points[i] = TIM1->CCR1;
 	  buffer.points[i+1] = TIM1->CCR2;
 	  buffer.points[i+2] = TIM1->CCR3;
+	  at24c256b_page_write(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)&buffer.points[i], 6, address, GPIOC, GPIO_ODR_10);
+	  address+=6;
 	  i+=3;
+	  vTaskDelay(10);
+	  at24c256b_page_write(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)&i, 2, 64, GPIOC, GPIO_ODR_10);
 	  if(i == 30) i = 0;
-	    buffer.sum = i-1;
+	    buffer.sum = i;
 	  vTaskDelay(100);
 //	  xEventGroupClearBits(buffer.xEventGroup1, 0x2);
 	  myEventGroup.flag2 = 0;
@@ -636,11 +649,21 @@ void path(void const * argument)
 		  vTaskDelay(15);
 	  }
 	  myEventGroup.flagBlockTaskServom = 1;
-	  for(uint8_t i = 0; i<(buffer.sum/3); i++)
+	  uint16_t data_fromEEPROM[30] = {0};
+	  uint16_t address = 0;
+	  uint16_t npoints = 0;
+	  at24c256b_sequential_read(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)&npoints, 2, 64, GPIOC, GPIO_ODR_10);
+	  for(uint8_t i = 0; i<(npoints/3); i++)
 	  {
-		  TIM1->CCR1 = ((float)buffer.points[i*3];
-		  TIM1->CCR2 = ((float)buffer.points[i*3+1];
-		  TIM1->CCR3 = ((float)buffer.points[i*3+2];
+		  at24c256b_sequential_read(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)&data_fromEEPROM[i*3], sizeof(data_fromEEPROM[i*3]), address, GPIOC, GPIO_ODR_10);
+		  address+=2;
+		  TIM1->CCR1 = data_fromEEPROM[i*3];
+		  at24c256b_sequential_read(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)&data_fromEEPROM[i*3+1], sizeof(data_fromEEPROM[i*3]), address, GPIOC, GPIO_ODR_10);
+		  address+=2;
+		  TIM1->CCR2 = data_fromEEPROM[i*3+1];
+		  at24c256b_sequential_read(&hi2c1, I2C_ADDRESS_AT24C256B, (int8_t*)&data_fromEEPROM[i*3+2], sizeof(data_fromEEPROM[i*3]), address, GPIOC, GPIO_ODR_10);
+		  address+=2;
+		  TIM1->CCR3 = data_fromEEPROM[i*3+2];
 		  vTaskDelay(600);
 		  __asm__ volatile("NOP");
 	  }
